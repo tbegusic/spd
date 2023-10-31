@@ -1,6 +1,7 @@
 import numpy as np
 from .utils import *
 from .PauliRepresentation import *
+from qiskit.quantum_info import SparsePauliOp
 
 class Simulation:
     """
@@ -34,7 +35,12 @@ class Simulation:
 
     @staticmethod
     def from_pauli_list(observable, operator_sequence, **kwargs):
-        return Simulation(PauliRepresentation.from_pauli_list(observable._z, observable._x, observable._phase, observable.num_qubits), operator_sequence, **kwargs)
+        if isinstance(observable, SparsePauliOp):
+            plist = observable._pauli_list
+            coeffs = observable.coeffs
+            return Simulation(PauliRepresentation.from_pauli_list(plist), operator_sequence, observable_coeffs = coeffs, **kwargs)
+        else:
+            return Simulation(PauliRepresentation.from_pauli_list(observable), operator_sequence, **kwargs)
     
     def run(self):
         """
@@ -42,7 +48,7 @@ class Simulation:
         Loops through all gates and applies each gate.
         """
         for j in range(self.operator_sequence.size):
-            op = PauliRepresentation.from_pauli_list(self.operator_sequence._pauli_list[j]._z, self.operator_sequence._pauli_list[j]._x, self.operator_sequence._pauli_list[j]._phase, self.nq)
+            op = PauliRepresentation.from_pauli_list(self.operator_sequence._pauli_list[j])
             self.apply_gate(j, op)
 
     def run_circuit(self):
@@ -54,11 +60,11 @@ class Simulation:
         nonzero_pauli_indices = np.where(self.observable.ztype())[0]
         return np.sum(self.observable.coeffs[nonzero_pauli_indices] * self.eval_exp_val(self.observable, nonzero_pauli_indices))
 
-    def run_dynamics(self, nsteps, process = None):
+    def run_dynamics(self, nsteps, process = None, process_every = 1):
         r = []
-        for j in range(nsteps):
+        for step in range(nsteps+1):
             self.run()
-            if process is not None:
+            if process is not None and (step % process_every == 0):
                 r.append(process(self.observable))
         if process is not None:
             return r
