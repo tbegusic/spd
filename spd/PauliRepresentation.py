@@ -31,11 +31,13 @@ class PauliRepresentation:
         """
         Constructs PauliRepresentation from qiskit SparsePauliOp.
         """
-        plist = op._pauli_list
-        coeffs = op.coeffs
+        plist = op._pauli_list.copy()
+        coeffs = op.coeffs.copy()
         return PauliRepresentation.from_pauli_list(plist, coeffs=coeffs)
     def size(self):
         return len(self.bits)
+    def copy(self):
+        return PauliRepresentation(self.bits.copy(), self.phase.copy(), self.nq, coeffs=self.coeffs.copy())
     def find_pauli_index(self, other):
         """
         Find index of a Pauli (other) or the index where the Pauli would be added if not existing already in self.
@@ -77,6 +79,14 @@ class PauliRepresentation:
         a_dot_b = anticommutation_relation(self.bits[:, self.nq:], other.bits[0, :self.nq])
         b_dot_a = anticommutation_relation(self.bits[:, :self.nq], other.bits[0, self.nq:])
         return not_equal(a_dot_b, b_dot_a)
+    def anticommutes_list(self, other):
+        """
+        Takes as input PauliRepresentation 'self' (a list of Paulis) and PauliRepresentation 'other'
+        and returns 2D logical array that indicates which Paulis in 'self' anticommute with the Paulis in 'other'.
+        """
+        a_dot_b = anticommutation_relation_list(self.bits[:, self.nq:], other.bits[:, :self.nq])
+        b_dot_a = anticommutation_relation_list(self.bits[:, :self.nq], other.bits[:, self.nq:])
+        return not_equal(a_dot_b, b_dot_a)
     def compose_with(self, other):
         """
         Composes all Paulis in 'self' with the Pauli (only one Pauli allowed) in 'other'.
@@ -84,6 +94,13 @@ class PauliRepresentation:
         """
         update_phase(self.phase[:], other.phase[0], self.bits[:, :self.nq], other.bits[0, self.nq:])
         inplace_xor(self.bits, other.bits[0, :])
+    def compose(self, other, mask):
+        """
+        Composes all Paulis in 'self' with all Paulis in 'other' for each pair where 'mask' is True.
+        Let A be a Pauli in 'self' and B ='other'. Then the result is C = B*A.
+        """
+        c, cp, cc = compose_mask(self.bits, self.phase, self.coeffs, other.bits, other.phase, other.coeffs, mask, np.count_nonzero(mask, axis=0), self.nq)
+        return PauliRepresentation(c, cp, self.nq, coeffs=cc)
     def order_pauli(self):
         """
         Orders Paulis in PauliRepresentation by first ordering bits at qubit 1, then bits at qubit 2, and so on.
@@ -92,6 +109,11 @@ class PauliRepresentation:
         self.bits = self.bits[indices]
         self.phase = self.phase[indices]
         return indices
+    def remove_duplicates(self, serial, order=True):
+        if order:
+            self.coeffs = self.coeffs[self.order_pauli()]
+        remove_duplicates(self.bits, self.phase, self.coeffs)
+        self.delete_pauli(np.flatnonzero(abs(self.coeffs)==0), serial=serial)
     def overlap(self, other):
         """
         Computes overlap of two Pauli sums as Tr[B^dag A] / N, where N is a normalization factor.
@@ -110,6 +132,34 @@ class PauliRepresentation:
             return np.logical_not(np.any(self.bits[:, self.nq:], axis=1))
         else:
             return np.logical_not(np.any(self.bits[index, self.nq:], axis=1))
+    def apply_h(self, h):
+        """
+        Computes [H,A], where A is Pauli representation 'self' and H is '0.5*h' (h is another Pauli representation, typically a Hamiltonian).
+        """
+        anticommuting = self.anticommutes_list(h)
+        if (np.any(anticommuting)):
+            out = self.compose(h, anticommuting)
+        else:
+            out = None 
+        return out
+
+    def sum_with_threshold(self, other, threshold, serial):
+        if other is not None:
+            index = self.find_pauli_index(other) % self.size()
+            found = self.find_pauli(other, index)
+            add_to_array(self.coeffs, found * other.coeffs * (-1j)**(other.phase - self.phase[index]), index)
+
+            to_remove = np.empty(self.size(), dtype=np.bool_)
+            a_lt_b(self.coeffs, threshold, to_remove)
+            if np.any(to_remove):
+                self.delete_pauli(np.flatnonzero(to_remove), serial)
+
+            to_add = np.empty(other.size(), dtype=np.bool_)
+            a_gt_b_and_not_c(other.coeffs, threshold, found, to_add)
+            if np.any(to_add):
+                paulis_to_add = PauliRepresentation(other.bits[to_add, :], other.phase[to_add], other.nq, coeffs=other.coeffs[to_add])
+                paulis_to_add.remove_duplicates(serial)
+                self.insert_pauli(paulis_to_add, paulis_to_add.coeffs, serial)
 
 def evaluate_expectation_value_zero_state(pauli, index):
     """

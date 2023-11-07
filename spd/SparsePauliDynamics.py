@@ -33,14 +33,14 @@ class Simulation:
         if self.eval_exp_val is None:
             self.eval_exp_val = evaluate_expectation_value_zero_state
 
-    @staticmethod
-    def from_pauli_list(observable, operator_sequence, **kwargs):
+    @classmethod
+    def from_pauli_list(cls, observable, operator_sequence, **kwargs):
         if isinstance(observable, SparsePauliOp):
             plist = observable._pauli_list
             coeffs = observable.coeffs
-            return Simulation(PauliRepresentation.from_pauli_list(plist), operator_sequence, observable_coeffs = coeffs, **kwargs)
+            return cls(PauliRepresentation.from_pauli_list(plist), operator_sequence, observable_coeffs = coeffs, **kwargs)
         else:
-            return Simulation(PauliRepresentation.from_pauli_list(observable), operator_sequence, **kwargs)
+            return cls(PauliRepresentation.from_pauli_list(observable), operator_sequence, **kwargs)
     
     def run(self):
         """

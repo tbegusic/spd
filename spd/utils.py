@@ -99,6 +99,14 @@ def anticommutation_relation(a, b):
     return np.mod(res, 2)
 
 @njit(parallel=True)
+def anticommutation_relation_list(a, b):
+    res = np.empty((len(a), len(b)), dtype=np.int32)
+    for i in prange(len(a)):
+        for j in range(len(b)):
+            res[i, j] = count_nonzero(np.bitwise_and(a[i,:], b[j,:]))
+    return np.mod(res, 2)
+
+@njit(parallel=True)
 def update_phase(p1, p2, a, b):
     for i in prange(len(p1)):
         p1[i] = p1[i] + p2 + 2*count_nonzero(np.bitwise_and(a[i, :], b[:]))
@@ -177,7 +185,44 @@ def pmult_array(a, b):
     a[:] = a[:] * b[:]
 
 @njit(parallel=True)
+def mask_mult(a, b, mask):
+    for i in prange(len(a)):
+        for j in range(len(b)):
+            if mask[i,j]:
+                a[i] = a[i] * b[j]
+
+@njit(parallel=True)
+def compose_mask(a, ap, ac, b, bp, bc, mask, new_size_array, nq):
+    new_size = sum(new_size_array)
+    res = np.empty((new_size, 2*nq), dtype=np.uint64)
+    res_p = np.empty(new_size, dtype=np.int32)
+    res_c = np.empty(new_size, dtype=np.complex128)
+    for i in prange(len(bp)):
+        l = sum(new_size_array[:i])
+        u = l + new_size_array[i]
+        res_p[l:u] = ap[mask[:, i]] + bp[i] + 2*count_nonzero_array(np.bitwise_and(a[mask[:, i], :nq], b[i, nq:]))
+        res[l:u] = np.bitwise_xor(a[mask[:, i], :], b[i, :])
+        res_c[l:u] = ac[mask[:, i]] * bc[i]
+    return res, res_p, res_c
+
+@njit
+def remove_duplicates(a, ap, ac):
+    i=0
+    while i < len(a)-1:
+        c=1
+        while (a[i, :] == a[i+c, :]).all():
+            ac[i] += ac[i+c] * (-1j)**(ap[i+c] - ap[i])
+            ac[i+c] = 0
+            c+=1
+        i+=c
+
+@njit(parallel=True)
 def update_coeffs(coeffs1, coeffs2, c, s, p1, p2, index1, index_exists):
     tmp = coeffs2.copy()
     pmult_array(tmp, index_exists * (1j) * s * (-1j)**(p2 - p1))
     coeffs1[index1] = coeffs1[index1] * c + tmp
+
+@njit
+def add_to_array(a, b, index):
+    for i in range(len(index)):
+        a[index[i]] += b[i]
