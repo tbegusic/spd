@@ -27,6 +27,8 @@ class DynamicsSimulation(Simulation):
             return
 
         r = []
+        if process is not None:
+            r.append(process(self.observable))
         for step in range(nsteps+1):
             apply_step(h)
             if process is not None and (step % process_every == 0):

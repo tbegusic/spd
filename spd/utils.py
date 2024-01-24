@@ -66,6 +66,13 @@ def bits_equal(a, b):
     return c
 
 @njit(parallel=True)
+def bits_equal_index(a, b, index):
+    c = np.empty(len(b), dtype=np.bool8)
+    for i in prange(len(c)):
+        c[i] = ~np.any(a[index[i], :] != b[i, :])
+    return c
+
+@njit(parallel=True)
 def inplace_xor(a,b):
     a[:,:] = np.bitwise_xor(a, b)
 
@@ -75,9 +82,19 @@ def a_lt_b(a, b, out):
         out[i] = np.abs(a[i]) < b
 
 @njit(parallel=True)
+def a_gt_b(a, b, out):
+    for i in prange(len(out)):
+        out[i] = np.abs(a[i]) >= b
+
+@njit(parallel=True)
 def a_gt_b_and_not_c(a, b, c, out):
     for i in prange(len(out)):
         out[i] = (np.abs(a[i]) >= b) & ~c[i]
+
+@njit(parallel=True)
+def a_gt_b_or_c(a, b, c, out):
+    for i in prange(len(out)):
+        out[i] = (np.abs(a[i]) >= b) or c[i]
 
 @njit(parallel=True)
 def find_bit_index(a, b, size_a, nq):
@@ -93,18 +110,18 @@ def find_bit_index(a, b, size_a, nq):
 
 @njit(parallel=True)
 def anticommutation_relation(a, b):
-    res = np.empty(len(a), dtype=np.int32)
+    res = np.empty(len(a), dtype=np.int16)
     for i in prange(len(a)):
-        res[i] = count_nonzero(np.bitwise_and(a[i,:], b[:]))
-    return np.mod(res, 2)
+        res[i] = np.mod(count_nonzero(np.bitwise_and(a[i,:], b[:])), 2)
+    return res
 
 @njit(parallel=True)
 def anticommutation_relation_list(a, b):
-    res = np.empty((len(a), len(b)), dtype=np.int32)
+    res = np.empty((len(a), len(b)), dtype=np.int16)
     for i in prange(len(a)):
         for j in range(len(b)):
-            res[i, j] = count_nonzero(np.bitwise_and(a[i,:], b[j,:]))
-    return np.mod(res, 2)
+            res[i, j] = np.mod(count_nonzero(np.bitwise_and(a[i,:], b[j,:])), 2)
+    return res
 
 @njit(parallel=True)
 def update_phase(p1, p2, a, b):
@@ -200,9 +217,10 @@ def compose_mask(a, ap, ac, b, bp, bc, mask, new_size_array, nq):
     for i in prange(len(bp)):
         l = sum(new_size_array[:i])
         u = l + new_size_array[i]
-        res_p[l:u] = ap[mask[:, i]] + bp[i] + 2*count_nonzero_array(np.bitwise_and(a[mask[:, i], :nq], b[i, nq:]))
-        res[l:u] = np.bitwise_xor(a[mask[:, i], :], b[i, :])
-        res_c[l:u] = ac[mask[:, i]] * bc[i]
+        m = mask[:, i]
+        res_p[l:u] = ap[m] + bp[i] + 2*count_nonzero_array(np.bitwise_and(a[m, :nq], b[i, nq:]))
+        res[l:u] = np.bitwise_xor(a[m, :], b[i, :])
+        res_c[l:u] = ac[m] * bc[i]
     return res, res_p, res_c
 
 @njit
@@ -219,8 +237,18 @@ def remove_duplicates(a, ap, ac):
 @njit(parallel=True)
 def update_coeffs(coeffs1, coeffs2, c, s, p1, p2, index1, index_exists):
     tmp = coeffs2.copy()
-    pmult_array(tmp, index_exists * (1j) * s * (-1j)**(p2 - p1))
+    pmult_array(tmp, index_exists * s * (-1j)**(p2-p1))
     coeffs1[index1] = coeffs1[index1] * c + tmp
+
+@njit(parallel=True)
+def tmp_product(c, p, p1, index, found):
+    out = np.empty(len(c), dtype=np.complex128)
+    for i in prange(len(c)):
+        if found[i]:
+            out[i] = c[i]  * (-1j)**(p[i] - p1[index[i]])
+        else:
+            out[i] = 0
+    return out
 
 @njit
 def add_to_array(a, b, index):

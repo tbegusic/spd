@@ -52,7 +52,7 @@ class PauliRepresentation:
         """
         if index is None:
             index = self.find_pauli_index(other)
-        return bits_equal(self.bits[index % self.size(), :], other.bits)
+        return bits_equal_index(self.bits, other.bits, index % self.size())
     def insert_pauli(self, other, coeffs, serial):
         """
         Insert a new Pauli or a list of Paulis (stored in PauliRepresentation 'other') into 'self'.
@@ -109,11 +109,11 @@ class PauliRepresentation:
         self.bits = self.bits[indices]
         self.phase = self.phase[indices]
         return indices
-    def remove_duplicates(self, serial, order=True):
+    def remove_duplicates(self, serial, order=True, threshold=0):
         if order:
             self.coeffs = self.coeffs[self.order_pauli()]
         remove_duplicates(self.bits, self.phase, self.coeffs)
-        self.delete_pauli(np.flatnonzero(abs(self.coeffs)==0), serial=serial)
+        self.delete_pauli(np.flatnonzero(abs(self.coeffs)<=threshold), serial=serial)
     def overlap(self, other):
         """
         Computes overlap of two Pauli sums as Tr[B^dag A] / N, where N is a normalization factor.
@@ -142,12 +142,12 @@ class PauliRepresentation:
         else:
             out = None 
         return out
-
     def sum_with_threshold(self, other, threshold, serial):
         if other is not None:
             index = self.find_pauli_index(other) % self.size()
             found = self.find_pauli(other, index)
-            add_to_array(self.coeffs, found * other.coeffs * (-1j)**(other.phase - self.phase[index]), index)
+            tmp = tmp_product(other.coeffs, other.phase, self.phase, index, found)
+            add_to_array(self.coeffs, tmp, index)
 
             to_remove = np.empty(self.size(), dtype=np.bool_)
             a_lt_b(self.coeffs, threshold, to_remove)

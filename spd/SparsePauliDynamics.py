@@ -62,9 +62,11 @@ class Simulation:
 
     def run_dynamics(self, nsteps, process = None, process_every = 1):
         r = []
-        for step in range(nsteps+1):
+        if process is not None:
+            r.append(process(self.observable))
+        for step in range(nsteps):
             self.run()
-            if process is not None and (step % process_every == 0):
+            if process is not None and ((step+1) % process_every == 0):
                 r.append(process(self.observable))
         if process is not None:
             return r
@@ -88,7 +90,7 @@ class Simulation:
             #Update coefficients for existing Paulis and precompute sin(theta) for those that will be added later.
             coeffs_sin = np.array(self.observable.coeffs[anticommuting])
             pmult(coeffs_sin, (1j) * self.sin_coeffs[j])
-            update_coeffs(self.observable.coeffs, self.observable.coeffs[new_pauli_indices%self.observable.size()], self.cos_coeffs[j], self.sin_coeffs[j], new_paulis.phase, self.observable.phase[new_pauli_indices%self.observable.size()], anticommuting, new_pauli_in_observable)
+            update_coeffs(self.observable.coeffs, self.observable.coeffs[new_pauli_indices%self.observable.size()], self.cos_coeffs[j], (1j) * self.sin_coeffs[j], new_paulis.phase, self.observable.phase[new_pauli_indices%self.observable.size()], anticommuting, new_pauli_in_observable)
 
             #Project out Paulis and their coefficients that are below threshold.
             to_add_remove = np.empty(len(anticommuting), dtype=np.bool_)
@@ -97,7 +99,6 @@ class Simulation:
                 self.observable.delete_pauli(anticommuting[to_add_remove], self.nprocs==1)
 
             #Find which Paulis will be added to the observable.
-            to_add_remove = (np.abs(coeffs_sin) >= self.threshold) & np.logical_not(new_pauli_in_observable)
             a_gt_b_and_not_c(coeffs_sin, self.threshold, new_pauli_in_observable, to_add_remove)
             if np.any(to_add_remove):
                 self.add_new_paulis(new_paulis, coeffs_sin, to_add_remove)
