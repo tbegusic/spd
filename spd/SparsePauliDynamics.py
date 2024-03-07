@@ -20,7 +20,10 @@ class Simulation:
     def __init__(self, observable, operator_sequence, **kwargs):
         self.nq = observable.nq
         self.observable = observable
-        self.observable.coeffs = np.array(kwargs.get('observable_coeffs', [1.0]), dtype=np.complex128)
+        if hasattr(self.observable, 'coeffs'):
+            self.observable.coeffs = np.array(kwargs.get('observable_coeffs', self.observable.coeffs), dtype=np.complex128)
+        else:
+            self.observable.coeffs = np.array(kwargs.get('observable_coeffs', [1.0]), dtype=np.complex128)
         self.observable.coeffs = self.observable.coeffs[self.observable.order_pauli()]
         self.operator_sequence = operator_sequence
         self.threshold = kwargs.get('threshold', 0.01)
