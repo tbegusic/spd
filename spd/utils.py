@@ -25,6 +25,16 @@ def packbits(bool_array):
     return res
 
 @njit
+def unpackbits(int_array, nq):
+    ndim1, ndim2 = np.shape(int_array)
+    assert nq >= ndim2, 'Cannot unpack ' + str(ndim2) + ' integers into ' + str(nq) + ' qubits'
+    res = np.empty((ndim1, nq), dtype = np.bool_)
+    for i in range(ndim1):
+        for j in range(0, nq, 64):
+            res[i, j:min(j+64, nq)] = int_array[i][int(j/64)] & powers_of_two[0:min(64, nq-j)] 
+    return res
+
+@njit
 def countSetBits(n):
     count = 0
     while (n):

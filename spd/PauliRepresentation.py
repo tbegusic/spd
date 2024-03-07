@@ -1,5 +1,6 @@
 import numpy as np
 from .utils import *
+from qiskit.quantum_info import SparsePauliOp, PauliList
 
 class PauliRepresentation:
     """
@@ -34,6 +35,12 @@ class PauliRepresentation:
         plist = op._pauli_list.copy()
         coeffs = op.coeffs.copy()
         return PauliRepresentation.from_pauli_list(plist, coeffs=coeffs)
+    def to_sparse_pauli_op(self, num_qubits):
+        """
+        Constructs qiskit SparsePauliOp from PauliRepresentation.
+        """
+        plist = PauliList.from_symplectic(unpackbits(self.bits[:, 0:self.nq], num_qubits), unpackbits(self.bits[:, self.nq:2*self.nq], num_qubits), self.phase % 4)
+        return SparsePauliOp(data = plist, coeffs = self.coeffs, ignore_pauli_phase=True)
     def size(self):
         return len(self.bits)
     def copy(self):
