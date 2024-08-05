@@ -39,8 +39,11 @@ class PauliRepresentation:
         """
         Constructs qiskit SparsePauliOp from PauliRepresentation.
         """
-        plist = PauliList.from_symplectic(unpackbits(self.bits[:, 0:self.nq], num_qubits), unpackbits(self.bits[:, self.nq:2*self.nq], num_qubits), self.phase % 4)
-        return SparsePauliOp(data = plist, coeffs = self.coeffs, ignore_pauli_phase=True)
+        plist = PauliList([''])
+        plist._z = unpackbits(self.bits[:, 0:self.nq], num_qubits)
+        plist._x = unpackbits(self.bits[:, self.nq:2*self.nq], num_qubits)
+        plist._phase = self.phase
+        return SparsePauliOp(data = PauliList(plist), coeffs = self.coeffs, ignore_pauli_phase=False)
     def size(self):
         return len(self.bits)
     def copy(self):
@@ -167,6 +170,12 @@ class PauliRepresentation:
                 paulis_to_add = PauliRepresentation(other.bits[to_add, :], other.phase[to_add], other.nq, coeffs=other.coeffs[to_add])
                 paulis_to_add.remove_duplicates(serial)
                 self.insert_pauli(paulis_to_add, paulis_to_add.coeffs, serial)
+    def count_x(self):
+        return count_and(np.bitwise_not(self.bits[:, :self.nq]), self.bits[:, self.nq:])
+    def count_y(self):
+        return count_and(self.bits[:, :self.nq], self.bits[:, self.nq:])
+    def count_z(self):
+        return count_and(self.bits[:, :self.nq], np.bitwise_not(self.bits[:, self.nq:]))
 
 def evaluate_expectation_value_zero_state(pauli, index):
     """
