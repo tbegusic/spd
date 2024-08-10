@@ -1,6 +1,6 @@
-from spd.OperatorSequence import OperatorSequence
 import numpy as np
-from qiskit.quantum_info import *
+from qiskit.quantum_info import Pauli, PauliList
+from spd.OperatorSequence import OperatorSequence
 
 #Procedures for building IBM's Heavy Hexagon coupling map.
 def build_row(start, end):

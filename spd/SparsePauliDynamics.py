@@ -132,13 +132,13 @@ class Simulation:
         self.observable.insert_pauli(paulis_to_add, coeffs_to_add, self.nprocs==1)
 
     @staticmethod
-    def evolve_pauli_sum(pauli_list, operator_sequence, coeffs = None, progress_bar = True, **kwargs):
+    def evolve_pauli_sum(pauli_list, operator_sequence, coeffs = None, **kwargs):
         """
         A wrapper for evaluating an expectation value of a sum of Paulis by first splitting the pauli_list into individual Paulis
         and constructing and running Simulation for each Pauli.
         """
         res = []
-        for i, pauli in enumerate(my_tqdm(progress_bar, pauli_list)):
+        for i, pauli in enumerate(pauli_list):
             c = np.array([1.0]) if coeffs is None else np.array(coeffs[i])
             res.append(Simulation.from_pauli_list(pauli, operator_sequence=operator_sequence, observable_coeffs=c, **kwargs).run_circuit())
         return sum([r for r in res])

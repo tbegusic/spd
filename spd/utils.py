@@ -1,22 +1,13 @@
 
 import numpy as np
 from numba import njit, prange, set_num_threads
-from math import ceil
-
-from tqdm.notebook import tqdm
 
 powers_of_two = 1 << np.arange(64, dtype=np.uint64)
 
-def my_tqdm(progress_bar, iterable):
-    if progress_bar:
-        return tqdm(iterable, leave=False)
-    else:
-        return iterable
-    
 @njit
 def packbits(bool_array):
     ndim1, ndim2 = np.shape(bool_array)
-    ndim2_out = ceil(ndim2/64)
+    ndim2_out = int(np.ceil(ndim2/64))
     res = np.empty((ndim1, ndim2_out), dtype = np.uint64)
     for i in range(ndim1):
         for j in range(0, ndim2_out):
@@ -126,14 +117,6 @@ def anticommutation_relation(a, b):
     return res
 
 @njit(parallel=True)
-def anticommutation_relation_list(a, b):
-    res = np.empty((len(a), len(b)), dtype=np.int16)
-    for i in prange(len(a)):
-        for j in range(len(b)):
-            res[i, j] = np.mod(count_nonzero(np.bitwise_and(a[i,:], b[j,:])), 2)
-    return res
-
-@njit(parallel=True)
 def update_phase(p1, p2, a, b):
     for i in prange(len(p1)):
         p1[i] = p1[i] + p2 + 2*count_nonzero(np.bitwise_and(a[i, :], b[:]))
@@ -211,28 +194,6 @@ def pmult(a, b):
 def pmult_array(a, b):
     a[:] = a[:] * b[:]
 
-@njit(parallel=True)
-def mask_mult(a, b, mask):
-    for i in prange(len(a)):
-        for j in range(len(b)):
-            if mask[i,j]:
-                a[i] = a[i] * b[j]
-
-@njit(parallel=True)
-def compose_mask(a, ap, ac, b, bp, bc, mask, new_size_array, nq):
-    new_size = sum(new_size_array)
-    res = np.empty((new_size, 2*nq), dtype=np.uint64)
-    res_p = np.empty(new_size, dtype=np.int32)
-    res_c = np.empty(new_size, dtype=np.complex128)
-    for i in prange(len(bp)):
-        l = sum(new_size_array[:i])
-        u = l + new_size_array[i]
-        m = mask[:, i]
-        res_p[l:u] = ap[m] + bp[i] + 2*count_nonzero_array(np.bitwise_and(a[m, :nq], b[i, nq:]))
-        res[l:u] = np.bitwise_xor(a[m, :], b[i, :])
-        res_c[l:u] = ac[m] * bc[i]
-    return res, res_p, res_c
-
 @njit
 def remove_duplicates(a, ap, ac):
     i=0
@@ -249,18 +210,3 @@ def update_coeffs(coeffs1, coeffs2, c, s, p1, p2, index1, index_exists):
     tmp = coeffs2.copy()
     pmult_array(tmp, index_exists * s * (-1j)**(p2-p1))
     coeffs1[index1] = coeffs1[index1] * c + tmp
-
-@njit(parallel=True)
-def tmp_product(c, p, p1, index, found):
-    out = np.empty(len(c), dtype=np.complex128)
-    for i in prange(len(c)):
-        if found[i]:
-            out[i] = c[i]  * (-1j)**(p[i] - p1[index[i]])
-        else:
-            out[i] = 0
-    return out
-
-@njit
-def add_to_array(a, b, index):
-    for i in range(len(index)):
-        a[index[i]] += b[i]
