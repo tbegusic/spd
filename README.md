@@ -13,8 +13,10 @@ v0.0: Code used in Ref. [1].
 
 v0.1: Code used in Ref. [2].
 
+v0.2: Code restructured, implemented sparse Majorana dynamics.
+
 ## References
 
 [1] T. Begusic, J. Gray, G. K. Chan, Sci. Adv. 10, eadk4321 (2024). arXiv:2308.05077 (2023).
 
-[2] T. Begusic, G. K. Chan, arXiv:2409.03097 (2024).
+[2] T. Begusic, G. K. Chan, PRX Quantum 6, 020302 (2025).

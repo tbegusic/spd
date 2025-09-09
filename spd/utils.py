@@ -19,11 +19,45 @@ def packbits(bool_array):
 def unpackbits(int_array, nq):
     ndim1, ndim2 = np.shape(int_array)
     assert nq >= ndim2, 'Cannot unpack ' + str(ndim2) + ' integers into ' + str(nq) + ' qubits'
-    res = np.empty((ndim1, nq), dtype = np.bool_)
+    res = np.empty((ndim1, nq), dtype = np.bool8)
     for i in range(ndim1):
         for j in range(0, nq, 64):
             res[i, j:min(j+64, nq)] = int_array[i][int(j/64)] & powers_of_two[0:min(64, nq-j)] 
     return res
+
+@njit
+def parityReprBits(n):
+    r = n
+    for _ in range(64):
+        n<<=1
+        r^=n
+    return r
+
+@njit
+def parity_repr(a):
+    sign = False
+    b=np.zeros_like(a)
+    for i in range(len(a)):
+        b[i] = parityReprBits(a[i])
+        if sign:
+            b[i] = ~b[i]
+        sign = ((b[i]>>64) and 1)
+    return b
+
+@njit(parallel=True)
+def parity_repr_array(a):
+    b=np.zeros_like(a)
+    for i in prange(len(a)):
+        b[i] = parity_repr(a[i])
+    return b
+
+@njit
+def parity(a):
+    ndim=len(a)
+    s = np.zeros(ndim, dtype=np.bool8)
+    for i in prange(ndim):
+        s[i]^=np.mod(count_nonzero(a[i]), 2)
+    return s
 
 @njit
 def countSetBits(n):
@@ -54,10 +88,16 @@ def count_and(a,b):
     return count_nonzero_array(c)
 
 @njit(parallel=True)
-def not_equal(a,b):
-    c = np.empty(len(a), dtype=np.bool_)
-    c = (a != b)
-    return c
+def count_or(a,b):
+    c = np.bitwise_or(a, b)
+    return count_nonzero_array(c)
+
+@njit(parallel=True)
+def count_and_array_bool(a, b):
+    res = np.empty(len(a), dtype=np.bool8)
+    for i in prange(len(a)):
+        res[i] = np.mod(count_nonzero(np.bitwise_and(a[i, :], b[:])), 2)
+    return res
 
 @njit(parallel=True)
 def bits_equal(a, b):
@@ -75,7 +115,8 @@ def bits_equal_index(a, b, index):
 
 @njit(parallel=True)
 def inplace_xor(a,b):
-    a[:,:] = np.bitwise_xor(a, b)
+    for i in prange(len(a)):
+        a[i,:]^=b
 
 @njit(parallel=True)
 def a_lt_b(a, b, out):
@@ -98,11 +139,13 @@ def a_gt_b_or_c(a, b, c, out):
         out[i] = (np.abs(a[i]) >= b) or c[i]
 
 @njit(parallel=True)
-def find_bit_index(a, b, size_a, nq):
-    lower = np.repeat(0, len(b))
-    upper = np.repeat(size_a, len(b))
-    for j in prange(len(b)):
-        for i in range(2*nq):
+def find_bit_index(a, b):
+    size_1, size_2 = a.shape
+    size_b = len(b)
+    lower = np.repeat(0, size_b)
+    upper = np.repeat(size_1, size_b)
+    for j in prange(size_b):
+        for i in range(size_2):
             if upper[j] == lower[j]:
                 break
             lower[j] = lower[j] + np.searchsorted(a[lower[j]:upper[j], i], b[j, i], side='left')
@@ -110,30 +153,15 @@ def find_bit_index(a, b, size_a, nq):
     return lower
 
 @njit(parallel=True)
-def anticommutation_relation(a, b):
-    res = np.empty(len(a), dtype=np.int16)
-    for i in prange(len(a)):
-        res[i] = np.mod(count_nonzero(np.bitwise_and(a[i,:], b[:])), 2)
-    return res
-
-@njit(parallel=True)
-def update_phase(p1, p2, a, b):
-    for i in prange(len(p1)):
-        p1[i] = p1[i] + p2 + 2*count_nonzero(np.bitwise_and(a[i, :], b[:]))
-    
-@njit(parallel=True)
-def insert_index(a,b, ap, bp, ac, bc, index, nq):
+def insert_index(a,b, ac, bc, index):
     new_size = len(a) + len(b)
-    res = np.empty((new_size, 2*nq), dtype=np.uint64)
-    res_p = np.empty(new_size, dtype=np.int32)
+    res = np.empty((new_size, a.shape[1]), dtype=np.uint64)
     res_c = np.empty(new_size, dtype=np.complex128)
     ind = index+np.arange(len(index))
     res[:ind[0]] = a[:index[0]]
-    res_p[:ind[0]] = ap[:index[0]]
     res_c[:ind[0]] = ac[:index[0]]
     for i in prange(len(ind)):
         res[ind[i]] = b[i]
-        res_p[ind[i]] = bp[i]
         res_c[ind[i]] = bc[i]
         if i==len(ind)-1:
             u = new_size
@@ -142,49 +170,42 @@ def insert_index(a,b, ap, bp, ac, bc, index, nq):
             u = ind[i+1]
             ua = index[i+1]
         res[ind[i]+1:u] = a[index[i]:ua]
-        res_p[ind[i]+1:u] = ap[index[i]:ua]
         res_c[ind[i]+1:u] = ac[index[i]:ua]
-    return res, res_p, res_c
+    return res, res_c
 
-def insert_index_serial(a,b, ap, bp, ac, bc, index, nq):
+def insert_index_serial(a,b, ac, bc, index):
     new_size = len(a) + len(b)
-    res = np.empty((new_size, 2*nq), dtype=np.uint64)
-    res_p = np.empty(new_size, dtype=np.int32)
+    res = np.empty((new_size, a.shape[1]), dtype=np.uint64)
     res_c = np.empty(new_size, dtype=np.complex128)
-    mask = np.zeros(new_size, dtype=np.bool_)
+    mask = np.zeros(new_size, dtype=np.bool8)
     mask[index+np.arange(len(index))] = True
     res[mask] = b[:]
-    res_p[mask] = bp[:]
     res_c[mask] = bc[:]
     mask = ~mask
     res[mask] = a[:]
-    res_p[mask] = ap[:]
     res_c[mask] = ac[:]
-    return res, res_p, res_c
+    return res, res_c
 
 @njit(parallel=True)
-def delete_index(a, ap, ac, index, nq):
+def delete_index(a, ac, index):
     new_size = len(a) - len(index)
-    res = np.empty((new_size, 2*nq), dtype=np.uint64)
-    res_p = np.empty(new_size, dtype=np.int32)
+    res = np.empty((new_size, a.shape[1]), dtype=np.uint64)
     res_c = np.empty(new_size, dtype=np.complex128)
-    mask = np.ones(len(a), dtype=np.bool_)
+    mask = np.ones(len(a), dtype=np.bool8)
     mask[index] = False 
     ind = np.nonzero(mask)[0]
     for i in prange(len(ind)):
         res[i] = a[ind[i]]
-        res_p[i] = ap[ind[i]]
         res_c[i] = ac[ind[i]]
-    return res, res_p, res_c
+    return res, res_c
 
 @njit
-def delete_index_serial(a, ap, ac, index):
-    mask = np.ones(len(a), dtype=np.bool_)
+def delete_index_serial(a, ac, index):
+    mask = np.ones(len(a), dtype=np.bool8)
     mask[index] = False 
     res = a[mask]
-    res_p = ap[mask]
     res_c = ac[mask]
-    return res, res_p, res_c
+    return res, res_c
 
 @njit(parallel=True)
 def pmult(a, b):
@@ -194,19 +215,29 @@ def pmult(a, b):
 def pmult_array(a, b):
     a[:] = a[:] * b[:]
 
+@njit(parallel=True)
+def pmult_mask(a, b, mask):
+    a[mask] = a[mask] * b
+
+@njit(parallel=True)
+def pmult_sign(a, b, sign):
+    for i in prange(len(a)):
+        a[i] = a[i] * b
+        if sign[i]:
+            a[i] = -a[i]
+
+@njit(parallel=True)
+def psum_index(a, b, index1):
+    for i in prange(len(index1)):
+        a[index1[i]] += b[i]
+
 @njit
-def remove_duplicates(a, ap, ac):
+def remove_duplicates(a, ac):
     i=0
     while i < len(a)-1:
         c=1
         while (a[i, :] == a[i+c, :]).all():
-            ac[i] += ac[i+c] * (-1j)**(ap[i+c] - ap[i])
+            ac[i] += ac[i+c]
             ac[i+c] = 0
             c+=1
         i+=c
-
-@njit(parallel=True)
-def update_coeffs(coeffs1, coeffs2, c, s, p1, p2, index1, index_exists):
-    tmp = coeffs2.copy()
-    pmult_array(tmp, index_exists * s * (-1j)**(p2-p1))
-    coeffs1[index1] = coeffs1[index1] * c + tmp
