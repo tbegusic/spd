@@ -19,7 +19,7 @@ def packbits(bool_array):
 def unpackbits(int_array, nq):
     ndim1, ndim2 = np.shape(int_array)
     assert nq >= ndim2, 'Cannot unpack ' + str(ndim2) + ' integers into ' + str(nq) + ' qubits'
-    res = np.empty((ndim1, nq), dtype = np.bool8)
+    res = np.empty((ndim1, nq), dtype = np.bool_)
     for i in range(ndim1):
         for j in range(0, nq, 64):
             res[i, j:min(j+64, nq)] = int_array[i][int(j/64)] & powers_of_two[0:min(64, nq-j)] 
@@ -54,7 +54,7 @@ def parity_repr_array(a):
 @njit
 def parity(a):
     ndim=len(a)
-    s = np.zeros(ndim, dtype=np.bool8)
+    s = np.zeros(ndim, dtype=np.bool_)
     for i in prange(ndim):
         s[i]^=np.mod(count_nonzero(a[i]), 2)
     return s
@@ -94,21 +94,21 @@ def count_or(a,b):
 
 @njit(parallel=True)
 def count_and_array_bool(a, b):
-    res = np.empty(len(a), dtype=np.bool8)
+    res = np.empty(len(a), dtype=np.bool_)
     for i in prange(len(a)):
         res[i] = np.mod(count_nonzero(np.bitwise_and(a[i, :], b[:])), 2)
     return res
 
 @njit(parallel=True)
 def bits_equal(a, b):
-    c = np.empty(len(b), dtype=np.bool8)
+    c = np.empty(len(b), dtype=np.bool_)
     for i in prange(len(c)):
         c[i] = np.all(a[i, :] == b[i, :])
     return c
 
 @njit(parallel=True)
 def bits_equal_index(a, b, index):
-    c = np.empty(len(b), dtype=np.bool8)
+    c = np.empty(len(b), dtype=np.bool_)
     for i in prange(len(c)):
         c[i] = ~np.any(a[index[i], :] != b[i, :])
     return c
@@ -177,7 +177,7 @@ def insert_index_serial(a,b, ac, bc, index):
     new_size = len(a) + len(b)
     res = np.empty((new_size, a.shape[1]), dtype=np.uint64)
     res_c = np.empty(new_size, dtype=np.complex128)
-    mask = np.zeros(new_size, dtype=np.bool8)
+    mask = np.zeros(new_size, dtype=np.bool_)
     mask[index+np.arange(len(index))] = True
     res[mask] = b[:]
     res_c[mask] = bc[:]
@@ -191,7 +191,7 @@ def delete_index(a, ac, index):
     new_size = len(a) - len(index)
     res = np.empty((new_size, a.shape[1]), dtype=np.uint64)
     res_c = np.empty(new_size, dtype=np.complex128)
-    mask = np.ones(len(a), dtype=np.bool8)
+    mask = np.ones(len(a), dtype=np.bool_)
     mask[index] = False 
     ind = np.nonzero(mask)[0]
     for i in prange(len(ind)):
@@ -201,7 +201,7 @@ def delete_index(a, ac, index):
 
 @njit
 def delete_index_serial(a, ac, index):
-    mask = np.ones(len(a), dtype=np.bool8)
+    mask = np.ones(len(a), dtype=np.bool_)
     mask[index] = False 
     res = a[mask]
     res_c = ac[mask]

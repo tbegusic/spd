@@ -114,7 +114,7 @@ class Simulation:
             psum_index(self.observable.coeffs, new_paulis.coeffs[new_pauli_in_observable], existing_indices)
 
             #Project out Paulis and their coefficients that are below threshold.
-            to_add_remove = np.empty(len(anticommuting), dtype=np.bool8)
+            to_add_remove = np.empty(len(anticommuting), dtype=np.bool_)
             a_lt_b(self.observable.coeffs[anticommuting], self.threshold, to_add_remove)
             if np.any(to_add_remove):
                 self.observable.delete_elements(anticommuting[to_add_remove], serial=(self.nprocs==1))
